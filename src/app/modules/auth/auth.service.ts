@@ -11,6 +11,7 @@ import { TempUserModel } from '../user/tempUser.model';
 
 const registerUserInitiate = async (payload: { email: string; name: string; password: string }) => {
   const isExitsUser = await UserModel.findOne({ email: payload.email });
+  
   if (isExitsUser) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User Already Exists');
   }
