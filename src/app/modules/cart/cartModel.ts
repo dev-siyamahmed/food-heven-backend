@@ -21,7 +21,7 @@ const CartItemSchema = new Schema<ICartItem>({
 });
 
 const CartSchema = new Schema<ICart>({
-  user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  user: { type: Schema.Types.ObjectId, ref: "User", default : null },
   items: [CartItemSchema],
   totalPrice: { type: Number, default: 0 },
 }, { timestamps: true });

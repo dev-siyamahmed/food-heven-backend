@@ -1,154 +1,145 @@
-import { Request, Response } from "express";
-import httpStatus from "http-status";
 import catchAsync from "../../utils/catchAsync";
-import sendResponse from "../../utils/sendResponse";
-import RestaurantModel from "../restaurant/restaurant.model";
 import CartModel from "./cartModel";
 import FoodModel from "../food/foodModel";
 
-export const addFoodToCart = catchAsync(async (req: Request, res: Response) => {
-  const { userId } = req.user;  // Assuming userId is available from JWT or session
-  const { foodId, quantity, email } = req.body;  // Food ID and quantity to be added to the cart
 
-  // Validate quantity
-  if (quantity <= 0) {
-    return res.status(400).json({ message: "Quantity must be greater than 0" });
+export const addFoodToCart = catchAsync(async (req, res) => {
+  const { foodId, quantity, email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: "ইমেইল প্রয়োজন!" });
   }
 
-  // Find the food item by its ID in the Food model
+  if (quantity <= 0) {
+    return res.status(400).json({ success: false, message: "পরিমাণ অবশ্যই ১ বা তার বেশি হতে হবে!" });
+  }
+
+  // ফুড পাওয়া গেল কিনা চেক করা
   const food = await FoodModel.findById(foodId);
   if (!food) {
-    return res.status(404).json({ message: "Food not found" });
+    return res.status(404).json({ success: false, message: "Food not found!" });
   }
 
-  // Check if the quantity requested is available in stock
-  if (quantity > food.stock) {
-    return res.status(400).json({ message: `Only ${food.stock} items available in stock` });
-  }
-
-  // Check if cart exists for the user
-  let cart = await CartModel.findOne({ user: userId });
+  // কার্ট চেক করা
+  let cart = await CartModel.findOne({ "items.email": email });
 
   if (!cart) {
-    // If no cart exists for the user, create a new one
-    cart = new CartModel({ user: userId, items: [] });
+    // নতুন কার্ট তৈরি করা
+    cart = new CartModel({ user: null, items: [], totalPrice: 0 });
   }
 
-  // Check if the food item already exists in the cart
-  const existingItemIndex = cart.items.findIndex(item => item.foodId.toString() === foodId);
+  // কার্টে ফুড আইটেম আছে কিনা চেক করা
+  const existingItemIndex = cart.items.findIndex((item) => item.foodId.toString() === foodId && item.email === email);
 
   if (existingItemIndex !== -1) {
-    // If food item exists, update the quantity
-    const currentQuantity = cart.items[existingItemIndex].quantity;
-    const newQuantity = currentQuantity + quantity;
-
-    // Check if the updated quantity is available in stock
-    if (newQuantity > food.stock) {
-      return res.status(400).json({ message: `Only ${food.stock} items available in stock` });
-    }
-
-    // Update the quantity in the cart
-    cart.items[existingItemIndex].quantity = newQuantity;
+    // যদি ফুড আগেই থাকে তাহলে পরিমাণ আপডেট করা
+    cart.items[existingItemIndex].quantity += quantity;
   } else {
-    // If food item doesn't exist, add a new item to the cart
+    // নতুন ফুড আইটেম যুক্ত করা
     cart.items.push({ foodId, quantity, email });
   }
 
-  // Calculate the total price for the added items
-  const totalPrice = food.price * quantity;
+  // টোটাল প্রাইস আপডেট করা
+  cart.totalPrice = cart.items.reduce((total, item) => {
+    return total + food.price * item.quantity;
+  }, 0);
 
-  // Add total price to the cart (optional: you can store a running total for the entire cart)
-  cart.totalPrice = cart.totalPrice ? cart.totalPrice + totalPrice : totalPrice;
-
-  // Save or update the cart
   await cart.save();
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
+  res.status(200).json({
     success: true,
-    message: "Food added to cart successfully",
-    data: cart,
+    message: "কার্টে সফলভাবে যোগ হয়েছে!",
+    cart,
   });
 });
 
 
+export const getCart = catchAsync(async (req, res) => {
+  const { email } = req.params;
 
-
-
-// export const addFoodToCart = catchAsync(async (req, res) => {
-
-
-//   sendResponse(res, {
-//     statusCode: httpStatus.OK,
-//     success: true,
-//     message: "Food added to cart successfully",
-//     data: cart,
-//   });
-// });
-
-
-
-
-
-
-
-export const getCart = catchAsync(async (req: Request, res: Response) => {
-  const { userId } = req.user;  // Get the userId from JWT or session
-
-  console.log(userId);
-
-  // Find the user's cart and populate the `foodId` field
-  const cart = await CartModel.findOne({ user: userId })
-    .populate({
-      path: 'items.foodId', // Path to populate foodId inside items array
-      model: 'Food',        // Reference to Food model for populating
-      select: 'name price description category stock imageUrl rating discount', // Select fields to populate
-    });
-
-  console.log("cart", cart);
-
-  if (!cart) {
-    return res.status(404).json({ message: "Cart not found" });
+  if (!email) {
+    return res.status(400).json({ success: false, message: "ইমেইল প্রদান করুন!" });
   }
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
+  const cart = await CartModel.aggregate([
+    { $match: { "items.email": email } },
+    { $unwind: "$items" },
+    {
+      $lookup: {
+        from: "foods", // Ensure this matches the correct MongoDB collection name
+        localField: "items.foodId",
+        foreignField: "_id",
+        as: "foodDetails",
+      }
+    },
+    { $unwind: "$foodDetails" },
+    {
+      $project: {
+        _id: 1,
+        user: 1,
+        "items.foodId": "$items.foodId",
+        "items.quantity": "$items.quantity",
+        "items.email": "$items.email",
+        "items.foodDetails": "$foodDetails",
+        "items.totalItemPrice": { $multiply: ["$items.quantity", "$foodDetails.price"] }, // Total price per item
+        totalPrice: 1,
+      }
+    },
+    {
+      $group: {
+        _id: "$_id",
+        user: { $first: "$user" },
+        items: {
+          $push: {
+            foodId: "$items.foodId",
+            quantity: "$items.quantity",
+            email: "$items.email",
+            foodDetails: "$items.foodDetails",
+            totalItemPrice: "$items.totalItemPrice", // Include calculated price per item
+          }
+        },
+        totalPrice: { $sum: "$items.totalItemPrice" } // Calculate total price for the whole cart
+      }
+    }
+  ]);
+
+  if (!cart || cart.length === 0) {
+    return res.status(404).json({ success: false, message: "Cart empty!" });
+  }
+
+  res.status(200).json({
     success: true,
-    message: "Cart retrieved successfully",
-    data: cart,  // Send the populated cart with food details
+    message: "cart data fetch successfully",
+    cart: cart[0], // Since aggregate returns an array, take the first element
   });
 });
 
 
+export const removeFoodFromCart = catchAsync(async (req, res) => {
+  const { foodId, email } = req.params;
 
-export const removeFoodFromCart = catchAsync(async (req: Request, res: Response) => {
-  const { userId } = req.user;  // Get the userId from JWT or session
-  const { foodId } = req.params;  // Food ID to be removed from the cart
+  if (!foodId || !email) {
+    return res.status(400).json({ success: false, message: "ইমেইল এবং ফুড আইডি প্রদান করুন!" });
+  }
 
   // Find the user's cart
-  const cart = await CartModel.findOne({ user: userId });
+  let cart = await CartModel.findOne({ "items.email": email });
 
   if (!cart) {
-    return res.status(404).json({ message: "Cart not found" });
+    return res.status(404).json({ success: false, message: "কার্ট খুঁজে পাওয়া যায়নি!" });
   }
 
-  // Check if the food item exists in the cart
-  const foodIndex = cart.items.findIndex(item => item.foodId.toString() === foodId);
+  // Find the price of the food before removing
+  const foodItem = await FoodModel.findById(foodId);
+  const foodPrice = foodItem ? foodItem.price : 0;
 
-  if (foodIndex === -1) {
-    return res.status(404).json({ message: "Food not found in cart" });
-  }
+  // Remove the specific item
+  cart.items = cart.items.filter((item) => item.foodId.toString() !== foodId);
 
-  // Remove the food item from the cart
-  cart.items.splice(foodIndex, 1);
+  // Recalculate total price (using actual food price)
+  cart.totalPrice = cart.items.reduce((total, item) => total + item.quantity * foodPrice, 0);
 
-  // Save the updated cart
   await cart.save();
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Food removed from cart successfully",
-    data: cart,
-  });
+  res.status(200).json({ success: true, message: "আইটেম কার্ট থেকে সফলভাবে সরানো হয়েছে!", cart });
 });

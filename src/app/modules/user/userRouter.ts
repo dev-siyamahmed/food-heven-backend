@@ -1,18 +1,23 @@
 import express from 'express';
-import { ROLE } from '../../constant/constant';
 import { addFoodToCart, getCart, removeFoodFromCart } from '../cart/cartController';
-import authMiddleware from '../../middlewares/authMiddleware';
 import { profileInfo } from '../auth/auth.controller';
+import { createOrder, getOrdersForUser, updateOrderPayment } from '../order/orderController';
 
 const router = express.Router();
 
-router.post('/add-to-cart', authMiddleware(ROLE.user), addFoodToCart);
-router.get("/cart/list", authMiddleware(ROLE.user) , getCart);
+router.post('/add-to-cart', addFoodToCart);
+router.get("/cart/list/:email", getCart);
 
 // Remove a food item from the user's cart
-router.delete("/cart/remove/:foodId",authMiddleware(ROLE.user),removeFoodFromCart);
+router.delete("/cart/remove/:foodId/:email",removeFoodFromCart);
 
 router.get('/profile/:email',  profileInfo )
+
+// order
+router.post('/order/create',  createOrder )
+router.post('/order/update-payment',  updateOrderPayment )
+
+router.get('/order/list/:email',  getOrdersForUser )
 
 
 export const UserRoute = router;
