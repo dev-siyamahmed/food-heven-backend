@@ -2,12 +2,13 @@ import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import AppError from '../errors/AppError';
-import { TUserRole } from '../modules/user/user.interface';
 import catchAsync from '../utils/catchAsync';
-import { UserModel } from '../modules/user/user.model';
 import config from '../config';
+import { TUserRole } from '../interface/userInterface';
+import { UserModel } from '../models/User';
+import { ROLE } from '../constant/constant';
 
-const authMiddleware = (...requiredRoles: TUserRole[]) => {
+const userAuth = (...requiredRoles: TUserRole[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
 
@@ -26,7 +27,7 @@ const authMiddleware = (...requiredRoles: TUserRole[]) => {
     // checking if the given token is valid
     const decoded = jwt.verify(
       token,
-      config.jwt_access_secret_key as string,
+      config.jwt_secret_token as string,
     ) as JwtPayload;
 
     if (!decoded) {
@@ -61,4 +62,15 @@ const authMiddleware = (...requiredRoles: TUserRole[]) => {
   });
 };
 
-export default authMiddleware;
+
+// Aliaes for different roles
+const adminAuth = userAuth(ROLE.admin);
+const employeeAuth = userAuth(ROLE.employee);
+const userOnlyAuth = userAuth(ROLE.user);
+
+// Auth Middleware for all authenticated users (admin, celebrity, user)
+const anyAuth = userAuth(ROLE.admin, ROLE.employee, ROLE.user);
+
+export { userAuth, adminAuth, employeeAuth, userOnlyAuth, anyAuth };
+
+// export default userAuth;

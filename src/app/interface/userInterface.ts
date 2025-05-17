@@ -1,5 +1,5 @@
 import { Model } from 'mongoose';
-import { ROLE } from '../../constant/constant';
+import { ROLE } from '../constant/constant';
 
 export type TUser = {
   _id?: string;
@@ -10,6 +10,8 @@ export type TUser = {
   isBlocked: boolean;
   createdAt: Date;
   updatedAt: Date;
+  verified: boolean;
+  status: 'active' | 'inactive' | 'delete' | 'block';
 };
 
 export interface TUserModel extends Model<TUser> {
