@@ -16,7 +16,7 @@ app.use(express.json());
 //   allowedHeaders: ["Content-Type", "Authorization"]
 // }));
 
-const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174']; // Add all frontend origins
+const allowedOrigins = ['https://food-heven-front-890xsxhpn-siyam-ahmeds-projects.vercel.app', 'http://localhost:5173']; // Add all frontend origins
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -36,7 +36,7 @@ app.use(cors({
 app.use('/api', router);
 
 app.get('/', (req: Request, res: Response) => {
-  res.status(200).json({ message: 'Welcome to Blog Server' });
+  res.status(200).json({ message: 'Welcome to Server' });
 });
 
 app.use(globalErrorHandler);
