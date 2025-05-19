@@ -1,15 +1,16 @@
 import { Schema, model } from 'mongoose';
-import { TUser, TUserModel } from './user.interface';
 import bcrypt from 'bcrypt';
-import config from '../../config';
+import { TUser, TUserModel } from '../interface/userInterface';
+import config from '../config';
 
 const UserSchema: Schema = new Schema<TUser>(
   {
-    name: { type: String },
+    name: { type: String, required: true , minlength: 3, maxlength: 30},
     email: { type: String, required: true },
     password: { type: String, required: true, select: 0 },
-    role: { type: String, enum: ['admin', 'user'], default: 'user' },
-    isBlocked: { type: Boolean, default: false },
+    role: { type: String, enum: ['admin', 'user', 'employee'], default: 'user' },
+    verified: { type: Boolean, default: false },
+    status: { type: String, enum: ['active', 'inactive', 'delete', 'block'], default: 'active' },
   },
   {
     timestamps: true,
@@ -19,12 +20,19 @@ const UserSchema: Schema = new Schema<TUser>(
 UserSchema.pre('save', async function (next) {
   const user = this;
 
-  // hashing password
-  user.password = await bcrypt.hash(
-    user.password,
-    Number(config.bcrypt_salt_round),
-  );
-  next();
+  // Only hash the password if it has been modified (or is new)
+  if (!user.isModified('password')) return next();
+
+  try {
+    // hashing password
+    user.password = await bcrypt.hash(
+      user.password,
+      Number(config.bcrypt_salt_round),
+    );
+    next();
+  } catch (error: any) {
+    next(error);
+  }
 });
 
 // set '' after saving password
